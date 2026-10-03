@@ -61,6 +61,27 @@ function canvasToBlob(canvas) {
   });
 }
 
+async function compressColors(canvas) {
+  const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+  if (!context) throw new Error('Das Bild konnte nicht komprimiert werden.');
+
+  // Preserve dimensions and alpha. Rounding RGB to 32 levels per channel
+  // removes low-visibility color noise so PNG compresses much better.
+  const rowsPerChunk = 256;
+  for (let y = 0; y < canvas.height; y += rowsPerChunk) {
+    const height = Math.min(rowsPerChunk, canvas.height - y);
+    const pixels = context.getImageData(0, y, canvas.width, height);
+    const rgba = pixels.data;
+    for (let i = 0; i < rgba.length; i += 4) {
+      rgba[i] = (rgba[i] + 4) & 0xf8;
+      rgba[i + 1] = (rgba[i + 1] + 4) & 0xf8;
+      rgba[i + 2] = (rgba[i + 2] + 4) & 0xf8;
+    }
+    context.putImageData(pixels, 0, y);
+    await pause(0);
+  }
+}
+
 async function capture() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || tab.windowId == null) throw new Error('Kein aktiver Tab gefunden.');
@@ -95,8 +116,10 @@ async function capture() {
           canvas = document.createElement('canvas');
           canvas.width = pixelWidth;
           canvas.height = pixelHeight;
-          context = canvas.getContext('2d');
+          context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
           if (!context) throw new Error('Die Bildfläche konnte nicht erstellt werden.');
+          context.fillStyle = '#fff';
+          context.fillRect(0, 0, pixelWidth, pixelHeight);
         }
 
         const left = col === 0 ? 0 : xs[col - 1] + page.viewportWidth;
@@ -120,11 +143,14 @@ async function capture() {
       }
     }
 
-    setStatus('Bild wird in die Zwischenablage kopiert …');
+    setStatus('Bild wird komprimiert …');
+    await compressColors(canvas);
     const blob = await canvasToBlob(canvas);
+    setStatus('Bild wird in die Zwischenablage kopiert …');
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    setStatus('Kopiert! Jetzt mit Strg + V einfügen.', 'success');
-    setTimeout(() => window.close(), 1400);
+    const megabytes = (blob.size / 1_000_000).toFixed(1).replace('.', ',');
+    setStatus(`Kopiert! PNG: ${megabytes} MB. Strg + V zum Einfügen.`, 'success');
+    setTimeout(() => window.close(), 2000);
   } finally {
     if (page) {
       await runInPage(tab.id, scrollPage, [page.scrollX, page.scrollY]).catch(() => {});
