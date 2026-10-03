@@ -12,7 +12,7 @@ Ein Klick auf das angepinnte Chrome-Symbol nimmt die gesamte scrollbare Webseite
 
 Die gewünschte Webseite öffnen und einmal auf Fullshot klicken. Das kleine Fenster zeigt den Fortschritt und schließt sich nach erfolgreichem Kopieren. Während der Aufnahme den Tab nicht wechseln.
 
-Fullshot behält die volle Bildauflösung. Vor dem PNG-Export rundet es jeden RGB-Farbkanal auf 32 Stufen. Das verändert einzelne Farbwerte geringfügig (höchstens 4 von 255), macht das PNG aber deutlich kleiner. Es ist daher **optisch sehr ähnlich, nicht bitgenau verlustfrei**. Das Fenster zeigt die Größe des erzeugten PNGs an; beim Einfügen kann Chrome das Bild nochmals kodieren.
+Fullshot rundet vor dem PNG-Export jeden RGB-Farbkanal auf 32 Stufen. Das verändert einzelne Farbwerte geringfügig (höchstens 4 von 255). Passt das PNG danach noch nicht unter **7,5 MB**, verkleinert Fullshot das Bild schrittweise mit hochwertiger Glättung. Das Fenster zeigt die Größe und gegebenenfalls die neue Bildbreite an. Fullshot kopiert kein PNG über diesem Grenzwert; bei ungewöhnlich großen Seiten kann es stattdessen eine Fehlermeldung zeigen. Die Kompression ist **nicht bitgenau verlustfrei**. Beim Einfügen kann die Zielanwendung das Bild nochmals kodieren.
 
 Fullshot benötigt `activeTab` und `scripting`, um nach dem Klick die aktuelle Seite zu scrollen und die sichtbaren Ausschnitte aufzunehmen. `clipboardWrite` erlaubt das Kopieren des PNG. Es fordert keinen dauerhaften Zugriff auf alle Websites an.
 

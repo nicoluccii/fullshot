@@ -12,9 +12,9 @@ const context = {
   setTimeout,
   clearTimeout
 };
-vm.runInNewContext(`${source}\nglobalThis.testApi = { quantizeChannel, compressColors };`, context);
+vm.runInNewContext(`${source}\nglobalThis.testApi = { quantizeChannel, compressColors, makeClipboardImage, MAX_CLIPBOARD_BYTES };`, context);
 
-const { quantizeChannel, compressColors } = context.testApi;
+const { quantizeChannel, compressColors, makeClipboardImage, MAX_CLIPBOARD_BYTES } = context.testApi;
 for (let value = 0; value < 256; value++) {
   const result = quantizeChannel(value);
   assert.ok(result >= 0 && result <= 255);
@@ -36,10 +36,39 @@ const fakeContext = {
   putImageData: (pixels) => { output = pixels.data; }
 };
 const canvas = { width: 2, height: 1, getContext: () => fakeContext };
-compressColors(canvas).then(() => {
+
+function fakeImageCanvas(sizeForWidth, width = 20, height = 20) {
+  return {
+    width,
+    height,
+    getContext: () => ({
+      getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      putImageData: () => {},
+      drawImage: () => {}
+    }),
+    toBlob(callback) { callback({ size: sizeForWidth(this.width) }); }
+  };
+}
+
+async function test() {
+  await compressColors(canvas);
   assert.deepEqual([...output], [255, 255, 255, 255, 255, 248, 248, 127]);
-  console.log('Compression boundary checks passed.');
-}).catch((error) => {
+
+  const sizeForWidth = (width) => Math.round(10_000_000 * (width / 20) ** 2);
+  context.document.createElement = () => fakeImageCanvas(sizeForWidth);
+  const result = await makeClipboardImage(fakeImageCanvas(sizeForWidth));
+  assert.ok(result.blob.size <= MAX_CLIPBOARD_BYTES);
+  assert.ok(result.scale < 1);
+
+  context.document.createElement = () => fakeImageCanvas(() => 9_000_000);
+  await assert.rejects(
+    makeClipboardImage(fakeImageCanvas(() => 9_000_000)),
+    /unter 8 MB zu groß/
+  );
+  console.log('Compression boundary and size-limit checks passed.');
+}
+
+test().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

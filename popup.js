@@ -1,5 +1,7 @@
 const statusElement = document.getElementById('status');
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const MAX_CLIPBOARD_BYTES = 7_500_000;
+const MIN_IMAGE_SCALE = 0.5;
 
 function setStatus(message, kind = '') {
   statusElement.textContent = message;
@@ -87,6 +89,43 @@ async function compressColors(canvas) {
   }
 }
 
+function nextImageScale(currentScale, byteSize) {
+  const safety = byteSize > MAX_CLIPBOARD_BYTES * 1.2 ? 0.88 : 0.95;
+  const proposal = currentScale * Math.sqrt(MAX_CLIPBOARD_BYTES / byteSize) * safety;
+  return Math.max(MIN_IMAGE_SCALE, Math.min(currentScale - 0.05, proposal));
+}
+
+async function makeClipboardImage(sourceCanvas) {
+  await compressColors(sourceCanvas);
+  let candidate = sourceCanvas;
+  let scale = 1;
+
+  while (true) {
+    const blob = await canvasToBlob(candidate);
+    if (blob.size <= MAX_CLIPBOARD_BYTES) return { blob, scale };
+    if (scale <= MIN_IMAGE_SCALE) {
+      throw new Error('Die Seite ist für ein Bild unter 8 MB zu groß.');
+    }
+
+    const nextScale = nextImageScale(scale, blob.size);
+    if (candidate !== sourceCanvas) {
+      candidate.width = 0;
+      candidate.height = 0;
+    }
+    candidate = document.createElement('canvas');
+    candidate.width = Math.max(1, Math.round(sourceCanvas.width * nextScale));
+    candidate.height = Math.max(1, Math.round(sourceCanvas.height * nextScale));
+    const context = candidate.getContext('2d', { alpha: false, willReadFrequently: true });
+    if (!context) throw new Error('Das Bild konnte nicht verkleinert werden.');
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(sourceCanvas, 0, 0, candidate.width, candidate.height);
+    setStatus('Bild wird auf unter 8 MB angepasst …');
+    await compressColors(candidate);
+    scale = nextScale;
+  }
+}
+
 async function capture() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || tab.windowId == null) throw new Error('Kein aktiver Tab gefunden.');
@@ -149,12 +188,12 @@ async function capture() {
     }
 
     setStatus('Bild wird komprimiert …');
-    await compressColors(canvas);
-    const blob = await canvasToBlob(canvas);
+    const { blob, scale } = await makeClipboardImage(canvas);
     setStatus('Bild wird in die Zwischenablage kopiert …');
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     const megabytes = (blob.size / 1_000_000).toFixed(1).replace('.', ',');
-    setStatus(`Kopiert! PNG: ${megabytes} MB. Strg + V zum Einfügen.`, 'success');
+    const scaleInfo = scale < 1 ? ` · ${Math.round(scale * 100)} % Bildbreite` : '';
+    setStatus(`Kopiert! PNG: ${megabytes} MB${scaleInfo}. Strg + V.`, 'success');
     setTimeout(() => window.close(), 2000);
   } finally {
     if (page) {
