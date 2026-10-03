@@ -61,6 +61,11 @@ function canvasToBlob(canvas) {
   });
 }
 
+function quantizeChannel(value) {
+  // Keep the rounded 256 value until it can be clamped to white.
+  return Math.min(255, (value + 4) & ~7);
+}
+
 async function compressColors(canvas) {
   const context = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
   if (!context) throw new Error('Das Bild konnte nicht komprimiert werden.');
@@ -73,9 +78,9 @@ async function compressColors(canvas) {
     const pixels = context.getImageData(0, y, canvas.width, height);
     const rgba = pixels.data;
     for (let i = 0; i < rgba.length; i += 4) {
-      rgba[i] = (rgba[i] + 4) & 0xf8;
-      rgba[i + 1] = (rgba[i + 1] + 4) & 0xf8;
-      rgba[i + 2] = (rgba[i + 2] + 4) & 0xf8;
+      rgba[i] = quantizeChannel(rgba[i]);
+      rgba[i + 1] = quantizeChannel(rgba[i + 1]);
+      rgba[i + 2] = quantizeChannel(rgba[i + 2]);
     }
     context.putImageData(pixels, 0, y);
     await pause(0);
